@@ -5,6 +5,8 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Runtime.Serialization;
 using Microsoft.VisualBasic;
 
 namespace windowsgallartapp
@@ -13,20 +15,170 @@ namespace windowsgallartapp
     {
         private string imagesDirectory = @"D:\Photos\BabyGirl";
         private Dictionary<int, List<string>> photoIndex; // Index photos by year
+        private const string INDEX_FILE_NAME = "photo_index.dat"; // File to store the index data
+        private string indexFilePath = @"C:\photo_index"; // Full path to the index file
+        private DateTime lastIndexTime; // Last time the index was updated
+        private HashSet<string> indexedDirectories; // Keep track of indexed directories
 
         public Form1()
         {
             InitializeComponent();
             flowLayoutPanelGallery.BackColor = Color.Black;
-            InitializeCopyMoveButtons(); // Initialize Copy/Move buttons
+            InitializeCopyMoveButtons(); // Initialize Copy/Move buttons            
+            // Set the index file path in the application's directory
+            indexFilePath = Path.Combine(Application.StartupPath, INDEX_FILE_NAME);
+            indexedDirectories = new HashSet<string>();
         }
 
         private void Form1_Load(object sender, EventArgs e)
         {
-            List<string> directories = GetUserDirectories(); // Prompt user for directories
-            IndexAllPhotos(directories); // Index photos using multi-threading
-            DisplayAllPhotosGroupedByYear(); // Display photos
+            // Try to load existing index first
+            if (LoadPhotoIndex())
+            {
+                DisplayAllPhotosGroupedByYear(); // Display photos from loaded index
+            }
+            else
+            {
+                // If loading failed, get directories and create a new index
+                List<string> directories = GetUserDirectories(); // Prompt user for directories
+                IndexAllPhotos(directories); // Index photos using multi-threading
+                SavePhotoIndex(); // Save the newly created index
+                DisplayAllPhotosGroupedByYear(); // Display photos
+            }
         }
+
+        // Save photo index to file
+        private void SavePhotoIndex()
+        {
+            try
+            {
+                using (FileStream fs = new FileStream(indexFilePath, FileMode.Create))
+                {
+                    var formatter = new BinaryFormatter();
+                    // Create a serializable data structure to save
+                    var dataToSave = new IndexData
+                    {
+                        Photos = photoIndex,
+                        IndexedDirectories = indexedDirectories.ToList(),
+                        LastIndexTime = DateTime.Now
+                    };
+                    formatter.Serialize(fs, dataToSave);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error saving photo index: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // Load photo index from file
+        private bool LoadPhotoIndex()
+        {
+            if (!File.Exists(indexFilePath))
+                return false;
+
+            try
+            {
+                using (FileStream fs = new FileStream(indexFilePath, FileMode.Open))
+                {
+                    var formatter = new BinaryFormatter();
+                    var loadedData = (IndexData)formatter.Deserialize(fs);
+
+                    // Restore data from file
+                    photoIndex = loadedData.Photos;
+                    indexedDirectories = new HashSet<string>(loadedData.IndexedDirectories);
+                    lastIndexTime = loadedData.LastIndexTime;
+
+                    // Validate the index (check if files still exist)
+                    if (ValidateIndex())
+                    {
+                        return true;
+                    }
+                    else
+                    {
+                        // If validation failed, clear the index and return false
+                        photoIndex = null;
+                        return false;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error loading photo index: {ex.Message}. A new index will be created.",
+                    "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return false;
+            }
+        }
+
+        // Validate that the indexed files still exist
+        private bool ValidateIndex()
+        {
+            if (photoIndex == null)
+                return false;
+
+            bool needsUpdate = false;
+
+            // Check if directories still exist
+            foreach (string dir in indexedDirectories.ToList())
+            {
+                if (!Directory.Exists(dir))
+                {
+                    needsUpdate = true;
+                    indexedDirectories.Remove(dir);
+                }
+            }
+
+            // Check for missing files and create a new clean dictionary
+            var validatedIndex = new Dictionary<int, List<string>>();
+
+            foreach (var yearGroup in photoIndex)
+            {
+                var validFiles = yearGroup.Value.Where(File.Exists).ToList();
+
+                if (validFiles.Count > 0)
+                {
+                    validatedIndex[yearGroup.Key] = validFiles;
+                }
+
+                if (validFiles.Count != yearGroup.Value.Count)
+                {
+                    needsUpdate = true;
+                }
+            }
+
+            // If we removed any files or directories, update the index
+            if (needsUpdate)
+            {
+                photoIndex = validatedIndex;
+                SavePhotoIndex(); // Save the cleaned-up index
+                MessageBox.Show("Some photos in the index were no longer found and have been removed.",
+                    "Index Updated", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+
+            return photoIndex.Count > 0;
+        }
+
+        // Check if any directories have been modified since last indexing
+        private bool NeedsReindexing(List<string> directories)
+        {
+            // If we don't have an index yet or it's empty, we need to index
+            if (photoIndex == null || photoIndex.Count == 0)
+                return true;
+
+            // Check if any directory's last write time is newer than our index time
+            foreach (var dir in directories)
+            {
+                if (!indexedDirectories.Contains(dir))
+                    return true; // New directory that wasn't previously indexed
+
+                var dirInfo = new DirectoryInfo(dir);
+                if (dirInfo.LastWriteTime > lastIndexTime)
+                    return true; // Directory was modified after our last indexing
+            }
+
+            return false;
+        }
+
         private string ShowInputDialog(string title, string prompt, string defaultValue = "")
         {
             Form inputForm = new Form
@@ -70,10 +222,15 @@ namespace windowsgallartapp
 
         private List<string> GetUserDirectories()
         {
+            // If we already have indexed directories, use them as default
+            string defaultDirs = indexedDirectories.Count > 0 ?
+                string.Join(",", indexedDirectories) :
+                @"D:\Photos\BabyGirl";
+
             string input = ShowInputDialog(
                 "Select Directories",
                 "Enter directories separated by commas (e.g., D:\\photos,C:\\photos\\test):",
-                @"D:\Photos\BabyGirl"
+                defaultDirs
             );
 
             if (string.IsNullOrWhiteSpace(input))
@@ -88,9 +245,9 @@ namespace windowsgallartapp
                         .ToList();
         }
 
-
         private void IndexAllPhotos(List<string> directories)
         {
+            // Check if we need to create a new photo index or if we can use the existing one
             if (photoIndex == null)
             {
                 photoIndex = new Dictionary<int, List<string>>();
@@ -98,32 +255,53 @@ namespace windowsgallartapp
 
             object lockObject = new object(); // For thread safety
 
-            Parallel.ForEach(directories, directory =>
+            // Show loading indicator
+            Cursor = Cursors.WaitCursor;
+            Text = "Indexing photos... Please wait.";
+            Application.DoEvents();
+
+            try
             {
-                var imageFiles = Directory.GetFiles(directory, "*.*", SearchOption.AllDirectories)
-                                          .Where(IsImageFile);
-
-                foreach (var file in imageFiles)
+                Parallel.ForEach(directories, directory =>
                 {
-                    int year = GetImageYear(file);
+                    var imageFiles = Directory.GetFiles(directory, "*.*", SearchOption.AllDirectories)
+                                              .Where(IsImageFile);
 
-                    lock (lockObject) // Ensure thread safety when modifying the dictionary
+                    lock (lockObject)
                     {
-                        if (!photoIndex.ContainsKey(year))
-                        {
-                            photoIndex[year] = new List<string>();
-                        }
+                        indexedDirectories.Add(directory); // Track indexed directories
+                    }
 
-                        // Avoid adding duplicate files
-                        if (!photoIndex[year].Contains(file))
+                    foreach (var file in imageFiles)
+                    {
+                        int year = GetImageYear(file);
+
+                        lock (lockObject) // Ensure thread safety when modifying the dictionary
                         {
-                            photoIndex[year].Add(file);
+                            if (!photoIndex.ContainsKey(year))
+                            {
+                                photoIndex[year] = new List<string>();
+                            }
+
+                            // Avoid adding duplicate files
+                            if (!photoIndex[year].Contains(file))
+                            {
+                                photoIndex[year].Add(file);
+                            }
                         }
                     }
-                }
-            });
-        }
+                });
 
+                // Update the last index time
+                lastIndexTime = DateTime.Now;
+            }
+            finally
+            {
+                // Restore cursor and form title
+                Cursor = Cursors.Default;
+                Text = "Photo Gallery";
+            }
+        }
 
         private List<string> selectedImages = new List<string>(); // Store selected images
         private Button copyButton;
@@ -180,7 +358,12 @@ namespace windowsgallartapp
                     MessageBox.Show("Files moved successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     selectedImages.Clear();
                     ShowCopyMoveButtons(false);
-                    //IndexAllPhotos(); // Re-index after moving files
+
+                    // Re-index to update the photo index
+                    List<string> dirs = new List<string>(indexedDirectories);
+                    photoIndex = new Dictionary<int, List<string>>();
+                    IndexAllPhotos(dirs);
+                    SavePhotoIndex(); // Save the updated index
                     DisplayAllPhotosGroupedByYear();
                 }
             }
@@ -315,17 +498,13 @@ namespace windowsgallartapp
         }
         private void btnAddDirectory_Click(object sender, EventArgs e)
         {
-            using (var dialog = new OpenFileDialog())
+            using (var dialog = new FolderBrowserDialog())
             {
-                dialog.Title = "Select a Directory";
-                dialog.Filter = "Folders|*.none"; // Dummy filter to show folders only
-                dialog.CheckFileExists = false; // Allow folder selection
-                dialog.ValidateNames = false; // Allow folder selection
-                dialog.FileName = "Select Folder"; // Default text in the file name box
+                dialog.Description = "Select a folder to add to the gallery";
 
                 if (dialog.ShowDialog() == DialogResult.OK)
                 {
-                    string selectedPath = Path.GetDirectoryName(dialog.FileName);
+                    string selectedPath = dialog.SelectedPath;
 
                     if (!Directory.Exists(selectedPath))
                     {
@@ -336,6 +515,9 @@ namespace windowsgallartapp
                     // Index only the new directory
                     List<string> newDirectories = new List<string> { selectedPath };
                     IndexAllPhotos(newDirectories);
+
+                    // Save the updated index
+                    SavePhotoIndex();
 
                     // Refresh the gallery
                     DisplayAllPhotosGroupedByYear();
@@ -607,6 +789,28 @@ namespace windowsgallartapp
         {
             MoveSelectedImages(); // Call the existing method to move selected images
         }
+
+        private void btnRefreshIndex_Click(object sender, EventArgs e)
+        {
+            // Force a reindex of all directories
+            if (indexedDirectories != null && indexedDirectories.Count > 0)
+            {
+                List<string> dirs = new List<string>(indexedDirectories);
+                photoIndex = new Dictionary<int, List<string>>();
+                IndexAllPhotos(dirs);
+                SavePhotoIndex();
+                DisplayAllPhotosGroupedByYear();
+                MessageBox.Show("Photo index has been refreshed.", "Index Updated", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            else
+            {
+                List<string> directories = GetUserDirectories(); // Prompt user for directories
+                IndexAllPhotos(directories); // Index photos using multi-threading
+                SavePhotoIndex(); // Save the newly created index
+                DisplayAllPhotosGroupedByYear(); // Display photos
+            }
+        }
+
         private int GetImageYear(string filePath)
         {
             try
@@ -652,5 +856,14 @@ namespace windowsgallartapp
             string ext = Path.GetExtension(filePath).ToLower();
             return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp" || ext == ".gif";
         }
+    }
+
+    // Serializable class to store the index data
+    [Serializable]
+    public class IndexData
+    {
+        public Dictionary<int, List<string>> Photos { get; set; }
+        public List<string> IndexedDirectories { get; set; }
+        public DateTime LastIndexTime { get; set; }
     }
 }
