@@ -1,0 +1,15 @@
+C:\Users\Administrator\source\repos\windowsgallartapp\windowsgallartapp\bin\Debug\windowsgallartapp.exe.config
+C:\Users\Administrator\source\repos\windowsgallartapp\windowsgallartapp\bin\Debug\windowsgallartapp.exe
+C:\Users\Administrator\source\repos\windowsgallartapp\windowsgallartapp\bin\Debug\windowsgallartapp.pdb
+C:\Users\Administrator\source\repos\windowsgallartapp\windowsgallartapp\obj\Debug\windowsgallartapp.csproj.AssemblyReference.cache
+C:\Users\Administrator\source\repos\windowsgallartapp\windowsgallartapp\obj\Debug\windowsgallartapp.Properties.Resources.resources
+C:\Users\Administrator\source\repos\windowsgallartapp\windowsgallartapp\obj\Debug\windowsgallartapp.csproj.GenerateResource.cache
+C:\Users\Administrator\source\repos\windowsgallartapp\windowsgallartapp\obj\Debug\windowsgallartapp.csproj.CoreCompileInputs.cache
+C:\Users\Administrator\source\repos\windowsgallartapp\windowsgallartapp\obj\Debug\windowsgallartapp.exe
+C:\Users\Administrator\source\repos\windowsgallartapp\windowsgallartapp\obj\Debug\windowsgallartapp.pdb
+C:\Users\Administrator\source\repos\windowsgallartapp\windowsgallartapp\bin\Debug\next.png
+C:\Users\Administrator\source\repos\windowsgallartapp\windowsgallartapp\bin\Debug\previous.png
+C:\Users\Administrator\source\repos\windowsgallartapp\windowsgallartapp\bin\Debug\rotate_left.png
+C:\Users\Administrator\source\repos\windowsgallartapp\windowsgallartapp\bin\Debug\rotate_right.png
+C:\Users\Administrator\source\repos\windowsgallartapp\windowsgallartapp\bin\Debug\zoom_in.png
+C:\Users\Administrator\source\repos\windowsgallartapp\windowsgallartapp\bin\Debug\zoom_out.png
