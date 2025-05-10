@@ -6,13 +6,14 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Runtime.Serialization.Formatters.Binary;
-using System.Runtime.Serialization;
-using Microsoft.VisualBasic;
+
 
 namespace windowsgallartapp
 {
     public partial class Form1 : Form
     {
+        private const string INDEX_DIRECTORY = @"C:\photo_index"; // Directory path
+        private const string INDEX_FILE_PATH = @"C:\photo_index\index.dat"; // Updated path with directory and filename
         private string imagesDirectory = @"D:\Photos\BabyGirl";
         private Dictionary<int, List<string>> photoIndex; // Index photos by year
         private const string INDEX_FILE_NAME = "photo_index.dat"; // File to store the index data
@@ -25,8 +26,11 @@ namespace windowsgallartapp
             InitializeComponent();
             flowLayoutPanelGallery.BackColor = Color.Black;
             InitializeCopyMoveButtons(); // Initialize Copy/Move buttons            
-            // Set the index file path in the application's directory
-            indexFilePath = Path.Combine(Application.StartupPath, INDEX_FILE_NAME);
+                                         // Set the index file path in the application's directory
+            if (!Directory.Exists(INDEX_DIRECTORY))
+            {
+                Directory.CreateDirectory(INDEX_DIRECTORY);
+            }
             indexedDirectories = new HashSet<string>();
         }
 
@@ -52,7 +56,11 @@ namespace windowsgallartapp
         {
             try
             {
-                using (FileStream fs = new FileStream(indexFilePath, FileMode.Create))
+                if (!Directory.Exists(INDEX_DIRECTORY))
+                {
+                    Directory.CreateDirectory(INDEX_DIRECTORY);
+                }
+                using (FileStream fs = new FileStream(INDEX_FILE_PATH, FileMode.Create))
                 {
                     var formatter = new BinaryFormatter();
                     // Create a serializable data structure to save
@@ -74,12 +82,12 @@ namespace windowsgallartapp
         // Load photo index from file
         private bool LoadPhotoIndex()
         {
-            if (!File.Exists(indexFilePath))
+            if (!File.Exists(INDEX_FILE_PATH))
                 return false;
 
             try
             {
-                using (FileStream fs = new FileStream(indexFilePath, FileMode.Open))
+                using (FileStream fs = new FileStream(INDEX_FILE_PATH, FileMode.Open))
                 {
                     var formatter = new BinaryFormatter();
                     var loadedData = (IndexData)formatter.Deserialize(fs);
